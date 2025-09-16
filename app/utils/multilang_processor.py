@@ -1,11 +1,11 @@
 from typing import List, Dict
 from langdetect import detect
-from app.utils.shona_processor import ShonaProcessor
+from app.utils.shona_processor import ShonaTextProcessor
 
 class MultiLanguageProcessor:
     def __init__(self):
         self.processors = {
-            'sn': ShonaProcessor(),  # 'sn' is the ISO 639-1 code for Shona
+            'sn': ShonaTextProcessor(),  # 'sn' is the ISO 639-1 code for Shona
             # Add more language processors as needed
         }
         
@@ -22,7 +22,7 @@ class MultiLanguageProcessor:
             raise ValueError(f"Language '{language}' is not supported. Supported languages: {list(self.processors.keys())}")
         return self.processors[language]
     
-    def tokenize(self, text: str, language: str = None, remove_punctuation: bool = True, 
+    async def tokenize(self, text: str, language: str = None, remove_punctuation: bool = True, 
                  remove_stopwords: bool = False) -> Dict:
         """
         Tokenize text in the specified language.
@@ -32,9 +32,15 @@ class MultiLanguageProcessor:
             language = self.detect_language(text)
             
         processor = self.get_processor(language)
-        return processor.tokenize(text, remove_punctuation, remove_stopwords)
+        tokens = await processor.tokenize(text, remove_punctuation, remove_stopwords)
+        cleaned_text = await processor.clean_text(text)
+        
+        return {
+            "cleaned_text": cleaned_text,
+            "tokens": tokens
+        }
     
-    def batch_tokenize(self, texts: List[str], language: str = None,
+    async def batch_tokenize(self, texts: List[str], language: str = None,
                       remove_punctuation: bool = True, remove_stopwords: bool = False) -> List[Dict]:
         """
         Batch tokenize texts in the specified language.
@@ -42,7 +48,7 @@ class MultiLanguageProcessor:
         """
         results = []
         for text in texts:
-            result = self.tokenize(text, language, remove_punctuation, remove_stopwords)
+            result = await self.tokenize(text, language, remove_punctuation, remove_stopwords)
             results.append(result)
         return results
     

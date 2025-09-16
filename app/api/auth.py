@@ -12,7 +12,9 @@ from app.security.auth import (
 from app.schemas import UserCreate, UserResponse, Token
 from datetime import timedelta
 import os
+import logging
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -36,11 +38,32 @@ async def register_user(user: UserCreate, db: Session = Depends(get_db)):
     db.refresh(db_user)
     return db_user
 
-@router.post("/token", response_model=Token)
+@router.post("/token", response_model=Token, status_code=status.HTTP_200_OK, name="login")
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
+    """
+    OAuth2 compatible token login, get an access token for future requests.
+    
+    The token endpoint accepts form data with the following fields:
+    - username: Your registered username
+    - password: Your password
+    - grant_type: Must be set to "password"
+    
+    Example usage:
+    ```
+    curl -X POST "http://localhost:8000/auth/token" \\
+         -H "Content-Type: application/x-www-form-urlencoded" \\
+         -d "username=your_username&password=your_password&grant_type=password"
+    ```
+    
+    Returns:
+        JSON containing:
+        - access_token: JWT token for authentication
+        - token_type: Type of token (bearer)
+    """
+    logger.info(f"Login attempt for user: {form_data.username}")  # Add logging
     user = db.query(User).filter(User.username == form_data.username).first()
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(

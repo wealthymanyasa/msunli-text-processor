@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from contextlib import asynccontextmanager
 import logging
+import os
 from redis.asyncio import Redis
 from sqlalchemy.orm import Session
 from .api.endpoints import router as api_router
@@ -11,6 +12,7 @@ from .utils.multilang_processor import MultiLanguageProcessor
 from .models.base import init_db, engine
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
+from .core.dependencies import rate_limit_dependency
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -21,6 +23,7 @@ text_processor = MultiLanguageProcessor()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global rate_limit_dependency
     # Startup
     logger.info("Starting Multi-Language Text Processor API")
     
@@ -31,13 +34,18 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Database initialization failed: {e}")
     
-    # Initialize Redis
+    # Initialize Redis and rate limiter
     try:
-        redis = Redis(host="redis", port=6380, decode_responses=True)
+        redis_url = os.getenv("REDIS_URL", "redis://redis:6379")
+        redis = Redis.from_url(redis_url, decode_responses=True)
+        await redis.ping()  # Test the connection
         await FastAPILimiter.init(redis)
-        logger.info("Redis connection established")
+        global rate_limit_dependency
+        rate_limit_dependency = RateLimiter(times=100, seconds=60)
+        logger.info("Redis connection and rate limiter initialized successfully")
     except Exception as e:
         logger.error(f"Redis connection failed: {e}")
+        rate_limit_dependency = None
     
     # Test processor initialization
     try:
@@ -67,16 +75,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Rate limiting middleware
-app.add_middleware(
-    RateLimiter,
-    calls=100,
-    time_window=60
-)
+# Initialize security
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
+
+# Rate limiting dependency - configured in lifespan context
+rate_limit_dependency = None
 
 # Include routers
 app.include_router(auth_router, prefix="/auth", tags=["authentication"])
-app.include_router(api_router, prefix="/api/v1", tags=["text-processing"])
+# Add rate limiting only if Redis is available
+router_dependencies = [Depends(oauth2_scheme)]
+if rate_limit_dependency:
+    router_dependencies.append(Depends(rate_limit_dependency))
+app.include_router(api_router, prefix="/api/v1", tags=["text-processing"], dependencies=router_dependencies)
+
+# Log available routes
+for route in app.routes:
+    logger.info(f"Route: {route.path}, Methods: {route.methods}")
 
 @app.get("/")
 async def root():
@@ -112,7 +127,7 @@ async def health_check():
 
     # Test Redis connection
     try:
-        redis = Redis(host="redis", port=6380, decode_responses=True)
+        redis = Redis.from_url("redis://redis:6379", decode_responses=True)
         await redis.ping()
         redis_status = True
     except Exception:

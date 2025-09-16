@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, ConfigDict
 from typing import List, Dict, Optional
 from datetime import datetime
 
@@ -22,8 +22,9 @@ class UserResponse(UserBase):
     is_active: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 # Text Processing schemas
 class TokenizeRequest(BaseModel):
@@ -32,15 +33,14 @@ class TokenizeRequest(BaseModel):
     remove_punctuation: bool = Field(True, description="Remove punctuation from tokens")
     remove_stopwords: bool = Field(False, description="Remove stopwords")
     
-    class Config:
-        schema_extra = {
-            "example": {
-                "text": "Mhuri yese yakaungana pamba pavakuru. Vakuru vakataura nyaya dzechinyakare.",
-                "language": "sn",  # ISO 639-1 code for Shona
-                "remove_punctuation": True,
-                "remove_stopwords": False
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "text": "Mhuri yese yakaungana pamba pavakuru. Vakuru vakataura nyaya dzechinyakare.",
+            "language": "sn",  # ISO 639-1 code for Shona
+            "remove_punctuation": True,
+            "remove_stopwords": False
         }
+    })
 
 class BatchTokenizeRequest(BaseModel):
     texts: List[str] = Field(..., description="List of texts to process")
@@ -57,8 +57,7 @@ class TokenizeResponse(BaseModel):
     user_id: Optional[int] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class StatisticsResponse(BaseModel):
     statistics: Dict
