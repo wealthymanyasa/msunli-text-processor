@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONPATH=/app
+      - UVICORN_WORKERS=4
+      - UVICORN_HOST=0.0.0.0
+      - UVICORN_PORT=8000
+      - DATABASE_URL=postgresql://user:password@db:5432/textprocessor
+      - JWT_SECRET=your-secret-key-here
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRATION_MINUTES=30
+    volumes:
+      - ./app:/app/app:ro
+    restart: unless-stopped
+    depends_on:
+      - db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Database
+  db:
+    image: postgres:14-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=textprocessor
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d textprocessor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for caching and rate limiting
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6380"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
